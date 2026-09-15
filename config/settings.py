@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-=8*4*(qm=m6y6p^s#r=-0p*=7582_d73rm-afokg10jt4gtku_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ["inventory-vendor-management-system.onrender.com", "localhost", "127.0.0.1"]
 
