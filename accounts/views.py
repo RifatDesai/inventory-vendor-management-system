@@ -20,6 +20,7 @@ from rest_framework import serializers
             name='LoginResponse',
             fields={
                 'message': serializers.CharField(),
+                'role': serializers.CharField(allow_null=True),
                 'access': serializers.CharField(),
                 'refresh': serializers.CharField(),
             },
@@ -51,6 +52,7 @@ def login_view(request):
 
     return Response({
         'message': 'Login successful',
+        'role': user.role.name if user.role else None,
         'access': str(refresh.access_token),
         'refresh': str(refresh),
     })
