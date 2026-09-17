@@ -1,16 +1,38 @@
 from django.db import transaction
+
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, serializers
 
 from drf_spectacular.utils import extend_schema, OpenApiResponse, inline_serializer
-from rest_framework import serializers
 
 from .models import Product
 from inventory.models import Inventory
 
 
+# ============================================================
+# LIST PRODUCTS + ADD PRODUCT
+# ============================================================
+
 @extend_schema(
+    methods=['GET'],
+    responses={
+        200: inline_serializer(
+            name='ProductListResponse',
+            fields={
+                'success': serializers.BooleanField(),
+                'message': serializers.CharField(),
+                'data': serializers.ListField(
+                    child=serializers.DictField()
+                ),
+                'errors': serializers.JSONField(allow_null=True),
+                'meta': serializers.DictField(),
+            },
+        ),
+    },
+)
+@extend_schema(
+    methods=['POST'],
     request=inline_serializer(
         name='AddProductRequest',
         fields={
@@ -35,8 +57,44 @@ from inventory.models import Inventory
         400: OpenApiResponse(description='Validation failed'),
     },
 )
-@api_view(['POST'])
-def add_product(request):
+@api_view(['GET', 'POST'])
+def products_list_create(request):
+
+    # ========================================================
+    # GET - List Products
+    # ========================================================
+
+    if request.method == 'GET':
+
+        products = Product.objects.all().order_by('-id')
+
+        data = []
+
+        for product in products:
+            data.append({
+                'id': product.id,
+                'name': product.name,
+                'sku': product.sku,
+                'category_id': product.category_id,
+                'reorder_level': product.reorder_level,
+                'status': product.status,
+                'created_at': product.created_at,
+                'updated_at': product.updated_at,
+            })
+
+        return Response({
+            'success': True,
+            'message': 'Products retrieved successfully.',
+            'data': data,
+            'errors': None,
+            'meta': {
+                'total': len(data)
+            }
+        }, status=status.HTTP_200_OK)
+
+    # ========================================================
+    # POST - Add Product
+    # ========================================================
 
     name = request.data.get('name')
     category_id = request.data.get('category_id')
@@ -50,11 +108,13 @@ def add_product(request):
         return Response({
             'success': False,
             'message': 'Validation failed.',
+            'data': {},
             'errors': {
                 'required_fields': [
                     'name, category_id and warehouse_id are required.'
                 ]
-            }
+            },
+            'meta': {}
         }, status=status.HTTP_400_BAD_REQUEST)
 
     numeric_fields = {
@@ -81,7 +141,9 @@ def add_product(request):
         return Response({
             'success': False,
             'message': 'Validation failed.',
-            'errors': errors
+            'data': {},
+            'errors': errors,
+            'meta': {}
         }, status=status.HTTP_400_BAD_REQUEST)
 
     try:
@@ -115,18 +177,49 @@ def add_product(request):
                 'reserved_qty': inventory.reserved_qty,
                 'damaged_qty': inventory.damaged_qty,
                 'total_quantity': inventory.total_quantity
-            }
+            },
+            'errors': None,
+            'meta': {}
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
         return Response({
             'success': False,
             'message': 'Failed to create product.',
-            'error': str(e)
+            'data': {},
+            'errors': {
+                'detail': str(e)
+            },
+            'meta': {}
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
+# ============================================================
+# EDIT PRODUCT
+# ============================================================
+
+# ============================================================
+# PRODUCT DETAILS + EDIT PRODUCT
+# ============================================================
+
 @extend_schema(
+    methods=['GET'],
+    responses={
+        200: inline_serializer(
+            name='ProductDetailResponse',
+            fields={
+                'success': serializers.BooleanField(),
+                'message': serializers.CharField(),
+                'data': serializers.DictField(),
+                'errors': serializers.JSONField(allow_null=True),
+                'meta': serializers.DictField(),
+            },
+        ),
+        404: OpenApiResponse(description='Product not found'),
+    },
+)
+@extend_schema(
+    methods=['PATCH'],
     request=inline_serializer(
         name='EditProductRequest',
         fields={
@@ -143,22 +236,56 @@ def add_product(request):
                 'success': serializers.BooleanField(),
                 'message': serializers.CharField(),
                 'data': serializers.DictField(),
+                'errors': serializers.JSONField(allow_null=True),
+                'meta': serializers.DictField(),
             },
         ),
         400: OpenApiResponse(description='Validation failed'),
         404: OpenApiResponse(description='Product not found'),
     },
 )
-@api_view(['PATCH'])
-def edit_product(request, product_id):
+@api_view(['GET', 'PATCH'])
+def product_detail(request, product_id):
 
     try:
         product = Product.objects.get(id=product_id)
     except Product.DoesNotExist:
         return Response({
             'success': False,
-            'message': 'Product not found.'
+            'message': 'Product not found.',
+            'data': {},
+            'errors': {
+                'product': 'Product not found.'
+            },
+            'meta': {}
         }, status=status.HTTP_404_NOT_FOUND)
+
+    # ========================================================
+    # GET - Product Details
+    # ========================================================
+
+    if request.method == 'GET':
+
+        return Response({
+            'success': True,
+            'message': 'Product details retrieved successfully.',
+            'data': {
+                'id': product.id,
+                'name': product.name,
+                'sku': product.sku,
+                'category_id': product.category_id,
+                'reorder_level': product.reorder_level,
+                'status': product.status,
+                'created_at': product.created_at,
+                'updated_at': product.updated_at
+            },
+            'errors': None,
+            'meta': {}
+        }, status=status.HTTP_200_OK)
+
+    # ========================================================
+    # PATCH - Edit Product
+    # ========================================================
 
     name = request.data.get('name')
     category_id = request.data.get('category_id')
@@ -196,7 +323,9 @@ def edit_product(request, product_id):
         return Response({
             'success': False,
             'message': 'Validation failed.',
-            'errors': errors
+            'data': {},
+            'errors': errors,
+            'meta': {}
         }, status=status.HTTP_400_BAD_REQUEST)
 
     if name is not None:
@@ -224,25 +353,15 @@ def edit_product(request, product_id):
             'reorder_level': product.reorder_level,
             'status': product.status,
             'updated_at': product.updated_at
-        }
-    }, status=status.HTTP_200_OK)
-
-    return Response({
-        'success': True,
-        'message': 'Product updated successfully.',
-        'data': {
-            'id': product.id,
-            'sku': product.sku,
-            'name': product.name,
-            'category_id': product.category_id,
-            'reorder_level': product.reorder_level,
-            'status': product.status,
-            'updated_at': product.updated_at
-        }
+        },
+        'errors': None,
+        'meta': {}
     }, status=status.HTTP_200_OK)
 
 
-# ↓↓↓ PASTE THE NEW CODE BELOW THIS LINE ↓↓↓
+# ============================================================
+# DEACTIVATE PRODUCT
+# ============================================================
 
 @extend_schema(
     responses={
@@ -265,7 +384,12 @@ def deactivate_product(request, product_id):
     except Product.DoesNotExist:
         return Response({
             'success': False,
-            'message': 'Product not found.'
+            'message': 'Product not found.',
+            'data': {},
+            'errors': {
+                'product': 'Product not found.'
+            },
+            'meta': {}
         }, status=status.HTTP_404_NOT_FOUND)
 
     product.status = False
@@ -280,6 +404,7 @@ def deactivate_product(request, product_id):
             'name': product.name,
             'status': product.status,
             'updated_at': product.updated_at
-        }
+        },
+        'errors': None,
+        'meta': {}
     }, status=status.HTTP_200_OK)
-
