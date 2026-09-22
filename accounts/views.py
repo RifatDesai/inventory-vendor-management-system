@@ -1,6 +1,7 @@
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status, serializers
+from rest_framework.permissions import IsAuthenticated
 
 from django.contrib.auth import authenticate
 
@@ -170,3 +171,112 @@ def refresh_token_view(request):
             },
             status=status.HTTP_400_BAD_REQUEST
         )
+# ============================================================
+# PROFILE
+# ============================================================
+
+@extend_schema(
+    request=inline_serializer(
+        name='ProfileUpdateRequest',
+        fields={
+            'current_password': serializers.CharField(required=False),
+            'new_password': serializers.CharField(required=False),
+        },
+    ),
+    responses={
+        200: inline_serializer(
+            name='ProfileResponse',
+            fields={
+                'success': serializers.BooleanField(),
+                'message': serializers.CharField(),
+                'data': serializers.DictField(),
+                'errors': serializers.JSONField(allow_null=True),
+                'meta': serializers.DictField(),
+            },
+        ),
+    },
+)
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def profile_view(request):
+
+    user = request.user
+
+    # GET PROFILE
+    if request.method == 'GET':
+        return Response(
+            {
+                'success': True,
+                'message': 'Profile fetched successfully.',
+                'data': {
+                    'id': user.id,
+                    'role': user.role.name if user.role else None,
+                },
+                'errors': None,
+                'meta': {}
+            },
+            status=status.HTTP_200_OK
+        )
+
+    # PATCH PROFILE / CHANGE PASSWORD
+    current_password = request.data.get('current_password')
+    new_password = request.data.get('new_password')
+
+    if not current_password or not new_password:
+        return Response(
+            {
+                'success': False,
+                'message': 'Current password and new password are required.',
+                'data': {},
+                'errors': {
+                    'password': 'Current password and new password are required.'
+                },
+                'meta': {}
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not user.check_password(current_password):
+        return Response(
+            {
+                'success': False,
+                'message': 'Current password is incorrect.',
+                'data': {},
+                'errors': {
+                    'current_password': 'Current password is incorrect.'
+                },
+                'meta': {}
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if len(new_password) < 8:
+        return Response(
+            {
+                'success': False,
+                'message': 'New password must be at least 8 characters long.',
+                'data': {},
+                'errors': {
+                    'new_password': 'Password must be at least 8 characters long.'
+                },
+                'meta': {}
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    user.set_password(new_password)
+    user.save()
+
+    return Response(
+        {
+            'success': True,
+            'message': 'Password updated successfully.',
+            'data': {
+                'id': user.id,
+                'role': user.role.name if user.role else None,
+            },
+            'errors': None,
+            'meta': {}
+        },
+        status=status.HTTP_200_OK
+    )
